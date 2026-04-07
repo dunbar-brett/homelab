@@ -1,0 +1,18 @@
+# Ignore the environment file containing keys
+.env
+
+# Ignore the actual application data/configs
+# These are the folders mapped to ./sonarr, ./radarr, etc.
+**/sonarr/
+**/radarr/
+**/prowlarr/
+**/qbittorrent/
+**/jellyfin/
+/homarr/homarr/
+
+# Ignore OS-specific junk
+.DS_Store
+Thumbs.db
+
+# Ignore any log files
+*.log
