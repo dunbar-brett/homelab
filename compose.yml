@@ -1,5 +1,5 @@
 services:
-  # --- NETWORK & MANAGEMENT ---
+  # --- NETWORK & VPN GATEWAY ---
   gluetun:
     image: qmcgaw/gluetun
     container_name: vpn-gateway
@@ -13,39 +13,35 @@ services:
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
     ports:
       - 8080:8080 # qBittorrent
-      - 8096:8096 # Jellyfin
       - 8989:8989 # Sonarr
       - 7878:7878 # Radarr
       - 8686:8686 # Lidarr
       - 9696:9696 # Prowlarr
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
+      - 5055:5055 # Jellyseerr
+      - 8191:8191 # FlareSolverr
     restart: always
 
+  # --- MANAGEMENT ---
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
-    restart: always
     ports:
       - "9443:9443"
-      - "9000:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./portainer/data:/data
+    restart: always
 
   homarr:
-    container_name: homarr
     image: ghcr.io/ajnart/homarr:latest
-    restart: unless-stopped
-    volumes:
-      - ./homarr/configs:/app/data/configs
-      - ./homarr/icons:/app/public/icons
-      - ./homarr/data:/data
+    container_name: homarr
     ports:
       - "7575:7575"
+    volumes:
+      - ./homarr/configs:/app/data/configs
+    restart: unless-stopped
 
-  # --- DOWNLOADERS & MEDIA ---
+  # --- THE MEDIA STACK (In Gluetun) ---
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
@@ -56,23 +52,9 @@ services:
       - TZ=${TZ}
     volumes:
       - ./qbittorrent/config:/config
-      - /mnt/storage/data/torrents:/downloads 
+      - /mnt/storage/data/torrents:/downloads
     restart: always
 
-  jellyfin:
-    image: jellyfin/jellyfin:latest
-    container_name: jellyfin
-    network_mode: "service:gluetun"
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - ./jellyfin/config:/config
-      - /mnt/storage/data/media:/data # Points to the parent media folder
-    restart: always
-
-  # --- THE ARR STACK ---
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
@@ -80,10 +62,9 @@ services:
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
-      - TZ=${TZ}
     volumes:
       - ./sonarr:/config
-      - /mnt/storage/data:/data # Root access to both /torrents and /media
+      - /mnt/storage/data:/data
     restart: unless-stopped
 
   radarr:
@@ -93,20 +74,18 @@ services:
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
-      - TZ=${TZ}
     volumes:
       - ./radarr:/config
       - /mnt/storage/data:/data
     restart: unless-stopped
 
-    lidarr:
+  lidarr:
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
     network_mode: "service:gluetun"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
-      - TZ=${TZ}
     volumes:
       - ./lidarr:/config
       - /mnt/storage/data:/data
@@ -116,18 +95,41 @@ services:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     network_mode: "service:gluetun"
+    volumes:
+      - ./prowlarr:/config
+    restart: unless-stopped
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    network_mode: "service:gluetun"
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TZ}
+    volumes:
+      - ./jellyseerr:/app/config
+    restart: unless-stopped
+
+  # --- EXTERNAL TO VPN (For Performance/Discovery) ---
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    ports:
+      - 8096:8096
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
-      - ./prowlarr:/config
+      - ./jellyfin/config:/config
+      - /mnt/storage/data/media:/data
     restart: unless-stopped
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
-    network_mode: "service:gluetun" # Keeps it behind the VPN
+    network_mode: "service:gluetun" # Keep it behind the VPN
     environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_LEVEL=info
       - TZ=${TZ}
     restart: unless-stopped
